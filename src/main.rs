@@ -1,16 +1,14 @@
-use axum::{
-    routing::post,
-    Json, Router,
-};
-use serde_json::json;
-use std::{net::SocketAddr, process::Command};
+use axum::{routing::post, Router};
+use std::{net::SocketAddr};
 use tokio::net::TcpListener;
+use std::process::Command;
 
 #[tokio::main]
 async fn main() {
+    //REST Server Part
     let app = Router::new()
-        .route("/screen/on", post(turn_on_screen))
-        .route("/screen/off", post(turn_off_screen));
+        .route("/screen/on", post(turn_on_tv))
+        .route("/screen/off", post(turn_off_tv));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 8181)); //replace [0, 0, 0, 0], 8181 with your IP and port
     println!("Server listening on http://{}", addr);
@@ -19,30 +17,42 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
-async fn turn_on_screen() -> Json<serde_json::Value> {
-    println!("Received ON request");
+async fn turn_on_tv() {
+    let output = Command::new("cec-client")
+        .arg("-s")
+        .arg("-d")
+        .arg("1")
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .expect("Failed to start cec-client");
 
-    let output = Command::new("sh")
-        .arg("-c")
-        .arg("echo 'on 0.0.0.0' | cec-client -s -d 1") //you may replace 'on 0.0.0.0' by 'on 0', use "echo 'scan' | cec-client -s -d 1" to see what's connected on HDMI
-        .output();
-
-    match output {
-        Ok(_) => Json(json!({ "status": "OK", "message": "Monitor is ON" })),
-        Err(_) => Json(json!({ "status": "error", "message": "Failed to wake up monitor" })),
+    if let Some(mut stdin) = output.stdin {
+        use std::io::Write;
+        /*
+        possible values are "on 0.0.0.0", "on 0" or"on f.f.f.f".
+        it depends on the cec network address of your remote device
+        use "echo 'scan' | cec-client -s -d 1" to see what's connected on HDMI
+        */
+        writeln!(stdin, "{}", "on f.f.f.f").expect("Failed to send CEC command");
     }
 }
 
-async fn turn_off_screen() -> Json<serde_json::Value> {
-    println!("Received OFF request");
+async fn turn_off_tv() {
+    let output = Command::new("cec-client")
+        .arg("-s")
+        .arg("-d")
+        .arg("1")
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .expect("Failed to start cec-client");
 
-    let output = Command::new("sh")
-        .arg("-c")
-        .arg("echo 'standby 0.0.0.0' | cec-client -s -d 1") //you may replace 'standby 0.0.0.0' by 'standby 0', use "echo 'scan' | cec-client -s -d 1" to see what's connected on HDMI
-        .output();
-
-    match output {
-        Ok(_) => Json(json!({ "status": "OK", "message": "Monitor is OFF" })),
-        Err(_) => Json(json!({ "status": "error", "message": "Failed to shut down monitor" })),
+    if let Some(mut stdin) = output.stdin {
+        use std::io::Write;
+        /*
+        possible values are "on 0.0.0.0", "on 0" or"on f.f.f.f".
+        it depends on the cec network address of your remote device
+        use "echo 'scan' | cec-client -s -d 1" to see what's connected on HDMI
+        */
+        writeln!(stdin, "{}", "standby f.f.f.f").expect("Failed to send CEC command");
     }
 }
